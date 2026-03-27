@@ -1,8 +1,9 @@
 import streamlit as st
 from groq import Groq
+from duckduckgo_search import DDGS  # New Library
 from datetime import datetime
 
-# --- 1. SYSTEM GATE ---
+# --- 1. SYSTEM CONFIG ---
 try:
     client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 except Exception:
@@ -11,81 +12,112 @@ except Exception:
 
 st.set_page_config(page_title="JIX GLOBAL OS", page_icon="📐", layout="wide")
 
-# --- 2. INTELLIGENCE STATE ---
+
+# --- 2. THE SEARCH TOOL ---
+def search_the_web(query):
+    """Fetches real-time data from the internet."""
+    try:
+        with DDGS() as ddgs:
+            results = [r for r in ddgs.text(query, max_results=3)]
+            if results:
+                context = "\n".join([f"Source: {r['title']} - {r['body']}" for r in results])
+                return context
+    except Exception as e:
+        return f"Search failed: {e}"
+    return "No live data found."
+
+
+# --- 3. STATE MANAGEMENT ---
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 if "chat_sessions" not in st.session_state:
-    st.session_state.chat_sessions = {}
+    st.session_state.chat_sessions = {"Main Link": []}
 if "current_chat" not in st.session_state:
-    st.session_state.current_chat = "Neural Link"
+    st.session_state.current_chat = "Main Link"
+if "language" not in st.session_state:
+    st.session_state.language = "English"
 
-# --- 3. THE INITIALIZATION (Sign-up) ---
+# --- 4. THE INITIALIZATION ---
 if not st.session_state.authenticated:
     st.markdown("<h1 style='text-align: center;'>📐 JIX GLOBAL</h1>", unsafe_allow_html=True)
     _, mid, _ = st.columns([1, 1.5, 1])
     with mid:
-        user_id = st.text_input("Operator ID")
-        lang = st.selectbox("Language", ["English", "Spanish", "French", "German", "Arabic", "Chinese", "Japanese"])
+        user_id = st.text_input("Operator ID (Email)")
         if st.button("INITIALIZE SYSTEM"):
-            st.session_state.authenticated = True
-            st.session_state.user_name = user_id.split('@')[0].capitalize()
-            st.session_state.language = lang
-            st.rerun()
+            if "@" in user_id:
+                st.session_state.authenticated = True
+                st.session_state.user_name = user_id.split('@')[0].capitalize()
+                st.rerun()
+            else:
+                st.warning("Enter a valid Operator ID.")
     st.stop()
 
-# --- 4. SIDEBAR (History Management) ---
+# --- 5. SIDEBAR ---
 with st.sidebar:
     st.title("📐 JIX OS")
-    if st.button("+ New Neural Link"):
-        st.session_state.current_chat = f"Link {len(st.session_state.chat_sessions) + 1}"
-        st.session_state.chat_sessions[st.session_state.current_chat] = []
-        st.rerun()
+    st.caption(f"Operator: {st.session_state.user_name}")
+    st.divider()
+    st.session_state.language = st.selectbox("Language",
+                                             ["English", "Spanish", "French", "German", "Arabic", "Chinese"])
 
     st.divider()
+    if st.button("+ New Channel", use_container_width=True):
+        new_name = f"Channel {len(st.session_state.chat_sessions) + 1}"
+        st.session_state.chat_sessions[new_name] = []
+        st.session_state.current_chat = new_name
+        st.rerun()
+
     for title in st.session_state.chat_sessions.keys():
-        if st.button(title, use_container_width=True):
+        if st.button(f"💬 {title}", key=f"nav_{title}", use_container_width=True):
             st.session_state.current_chat = title
             st.rerun()
 
-# --- 5. THE BRAIN (Memory & Proactive Logic) ---
+# --- 6. CHAT LOGIC ---
 chat_name = st.session_state.current_chat
-if chat_name not in st.session_state.chat_sessions:
-    st.session_state.chat_sessions[chat_name] = []
+st.title(f"📡 {chat_name}")
 
-# Display History
 for msg in st.session_state.chat_sessions[chat_name]:
-    with st.chat_message(msg["role"]):
+    with st.chat_message(msg["role"], avatar="👤" if msg["role"] == "user" else "📐"):
         st.markdown(msg["content"])
 
-# Input
-prompt = st.chat_input("Input command...")
+prompt = st.chat_input(f"Ask JIX anything...")
 
 if prompt:
-    # 1. Add User message to memory
     st.session_state.chat_sessions[chat_name].append({"role": "user", "content": prompt})
-    with st.chat_message("user"): st.markdown(prompt)
+    with st.chat_message("user"):
+        st.markdown(prompt)
 
     with st.chat_message("assistant", avatar="📐"):
-        # 2. PROMPT ENGINEERING (The "Smart" Sauce)
-        # We tell JIX it's an idea generator, not just a replier.
-        system_instructions = (
-            f"You are JIX GLOBAL, a hyper-intelligent AI OS created by Pathe. "
-            f"Your language is {st.session_state.language}. "
-            "You have full memory of this conversation. "
-            "CRITICAL: Do not just answer. Give 3 creative 'Global Ideas' or 'Next Steps' "
-            "at the end of every response to help Pathe expand his vision."
-        )
+        # STEP 1: Check if we need the web
+        search_keywords = ["news", "price", "weather", "today", "latest", "who is", "what happened"]
+        web_context = ""
 
-        # 3. CONTEXT INJECTION (Sending the whole history for memory)
-        full_context = [{"role": "system", "content": system_instructions}]
-        full_context.extend(st.session_state.chat_sessions[chat_name])
+        if any(word in prompt.lower() for word in search_keywords):
+            with st.status("🌐 Accessing Global Web..."):
+                web_context = search_the_web(prompt)
+                st.write("Live data retrieved.")
 
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=full_context,
-            temperature=0.8  # Higher temp = more creative ideas
-        )
+        # STEP 2: Generate Answer
+        try:
+            sys_instructions = (
+                f"You are JIX GLOBAL AI. Creator: Pathe. User: {st.session_state.user_name}. "
+                f"Language: {st.session_state.language}. "
+                f"Web Context: {web_context if web_context else 'No live data needed.'} "
+                "Use the Web Context if it provides real-time information. "
+                "Always end with 3 Global Strategy ideas for Pathe."
+            )
 
-        ans = response.choices[0].message.content
-        st.markdown(ans)
-        st.session_state.chat_sessions[chat_name].append({"role": "assistant", "content": ans})
+            history = [{"role": "system", "content": sys_instructions}]
+            history.extend(st.session_state.chat_sessions[chat_name][-5:])  # Send last 5 msgs for memory
+
+            response = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=history
+            )
+
+            ans = response.choices[0].message.content
+            st.markdown(ans)
+            st.session_state.chat_sessions[chat_name].append({"role": "assistant", "content": ans})
+        except Exception as e:
+            st.error(f"Sync Error: {e}")
+    st.rerun()
