@@ -1,169 +1,91 @@
 import streamlit as st
 from groq import Groq
-import time
 from datetime import datetime
 
-# --- 1. CONFIG & API ---
+# --- 1. SYSTEM GATE ---
 try:
     client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 except Exception:
-    st.error("🔑 API Key Missing! Please add your Groq key to .streamlit/secrets.toml")
+    st.error("🔑 API Key Missing! Add it to Streamlit Secrets.")
     st.stop()
 
-st.set_page_config(page_title="JIX GLOBAL", page_icon="📐", layout="wide")
+st.set_page_config(page_title="JIX GLOBAL OS", page_icon="📐", layout="wide")
 
-# --- 2. SESSION STATE ---
+# --- 2. INTELLIGENCE STATE ---
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 if "chat_sessions" not in st.session_state:
     st.session_state.chat_sessions = {}
 if "current_chat" not in st.session_state:
-    st.session_state.current_chat = "New Chat"
-if "project_map" not in st.session_state:
-    st.session_state.project_map = {}
-if "mode" not in st.session_state:
-    st.session_state.mode = "Fast"
-if "language" not in st.session_state:
-    st.session_state.language = "English"
-if "mood" not in st.session_state:
-    st.session_state.mood = "Professional"
+    st.session_state.current_chat = "Neural Link"
 
-
-# --- 3. SMART TITLE GENERATOR ---
-def generate_short_title(text):
-    try:
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[
-                {"role": "system", "content": "Create a 2-3 word title for this chat. No punctuation."},
-                {"role": "user", "content": text}
-            ]
-        )
-        return response.choices[0].message.content.strip().replace('"', '')
-    except:
-        return text[:15] + "..."
-
-
-# --- 4. GLOBAL LOGIN GATE ---
+# --- 3. THE INITIALIZATION (Sign-up) ---
 if not st.session_state.authenticated:
-    st.markdown("<h1 style='text-align: center; margin-top: 5vh;'>📐 JIX GLOBAL OS</h1>", unsafe_allow_html=True)
-    with st.container():
-        _, mid, _ = st.columns([1, 1.5, 1])
-        with mid:
-            # Expanded International List
-            all_languages = [
-                "English", "Spanish", "French", "German", "Chinese",
-                "Japanese", "Korean", "Arabic", "Portuguese", "Russian",
-                "Italian", "Hindi", "Turkish", "Dutch", "Greek", "Hebrew"
-            ]
-
-            user_id = st.text_input("Operator ID (Email)")
-            selected_lang = st.selectbox("Select System Language", all_languages)
-
-            if st.button("🚀 INITIALIZE GLOBAL LINK", use_container_width=True):
-                if "@" in user_id:
-                    st.session_state.authenticated = True
-                    st.session_state.user_name = user_id.split('@')[0].capitalize()
-                    st.session_state.language = selected_lang
-                    st.rerun()
-                else:
-                    st.warning("Please enter a valid Operator ID.")
+    st.markdown("<h1 style='text-align: center;'>📐 JIX GLOBAL</h1>", unsafe_allow_html=True)
+    _, mid, _ = st.columns([1, 1.5, 1])
+    with mid:
+        user_id = st.text_input("Operator ID")
+        lang = st.selectbox("Language", ["English", "Spanish", "French", "German", "Arabic", "Chinese", "Japanese"])
+        if st.button("INITIALIZE SYSTEM"):
+            st.session_state.authenticated = True
+            st.session_state.user_name = user_id.split('@')[0].capitalize()
+            st.session_state.language = lang
+            st.rerun()
     st.stop()
 
-# --- 5. SIDEBAR NAVIGATION ---
+# --- 4. SIDEBAR (History Management) ---
 with st.sidebar:
-    st.markdown(f"### 📐 JIX GLOBAL")
-    st.caption(f"🌐 {st.session_state.language} Interface")
-
-    if st.button("📝 New chat", use_container_width=True):
-        st.session_state.current_chat = "New Chat"
+    st.title("📐 JIX OS")
+    if st.button("+ New Neural Link"):
+        st.session_state.current_chat = f"Link {len(st.session_state.chat_sessions) + 1}"
+        st.session_state.chat_sessions[st.session_state.current_chat] = []
         st.rerun()
 
     st.divider()
-
-    with st.expander("🎭 AI Mood Settings"):
-        st.session_state.mood = st.select_slider(
-            "Current Mood",
-            options=["Serious", "Professional", "Friendly", "Creative", "Chaos"],
-            value=st.session_state.mood
-        )
-
-    with st.expander("⭐ My stuff", expanded=True):
-        if not st.session_state.project_map:
-            st.caption("No projects pinned.")
-        for proj, chat_ref in st.session_state.project_map.items():
-            if st.button(f"📁 {proj}", key=f"p_{proj}", use_container_width=True):
-                st.session_state.current_chat = chat_ref
-                st.rerun()
-
-    st.divider()
-    st.caption("Recent History")
-    # THE FIXED LOOP
-    for title in reversed(list(st.session_state.chat_sessions.keys())):
-        btn_type = "primary" if title == st.session_state.current_chat else "secondary"
-        if st.button(f"💬 {title}", key=f"btn_{title}", type=btn_type, use_container_width=True):
+    for title in st.session_state.chat_sessions.keys():
+        if st.button(title, use_container_width=True):
             st.session_state.current_chat = title
             st.rerun()
 
-# --- 6. HOME SCREEN ---
-current_history = st.session_state.chat_sessions.get(st.session_state.current_chat, [])
+# --- 5. THE BRAIN (Memory & Proactive Logic) ---
+chat_name = st.session_state.current_chat
+if chat_name not in st.session_state.chat_sessions:
+    st.session_state.chat_sessions[chat_name] = []
 
-if not current_history:
-    st.markdown(f"""
-        <div style="text-align: center; margin-top: 10vh;">
-            <h1 style="font-size: 3.5rem;">📐 **Welcome, {st.session_state.user_name}**</h1>
-            <h2 style="color: #888; font-weight: 400;">System ready in {st.session_state.language}</h2>
-        </div>
-    """, unsafe_allow_html=True)
-
-    st.write(" ")
-    c1, c2, c3, c4 = st.columns(4)
-    with c1: st.button("📝 Write", use_container_width=True)
-    with c2: st.button("💡 Ideas", use_container_width=True)
-    with c3: st.button("🎓 Learn", use_container_width=True)
-    with c4: st.button("🚀 Boost", use_container_width=True)
-
-# --- 7. MESSAGE DISPLAY ---
-for msg in current_history:
-    with st.chat_message(msg["role"], avatar="📐" if msg["role"] == "assistant" else "👤"):
+# Display History
+for msg in st.session_state.chat_sessions[chat_name]:
+    with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# --- 8. INPUT BAR ---
-in_col, tool_col = st.columns([0.92, 0.08])
-with tool_col:
-    with st.popover("➕"):
-        if st.button("🧠 Deep"): st.session_state.mode = "Deep"
-        if st.button("⚡ Fast"): st.session_state.mode = "Fast"
-        st.divider()
-        if st.button("📌 Pin Project"):
-            if st.session_state.current_chat != "New Chat":
-                st.session_state.project_map[st.session_state.current_chat] = st.session_state.current_chat
-                st.toast("Project Saved!")
+# Input
+prompt = st.chat_input("Input command...")
 
-with in_col:
-    prompt = st.chat_input(f"Syncing in {st.session_state.language}...")
-
-# --- 9. THE BRAIN ---
 if prompt:
-    active_chat = st.session_state.current_chat
-    if active_chat == "New Chat":
-        new_title = generate_short_title(prompt)
-        st.session_state.chat_sessions[new_title] = []
-        st.session_state.current_chat = new_title
-        active_chat = new_title
-
-    st.session_state.chat_sessions[active_chat].append({"role": "user", "content": prompt})
+    # 1. Add User message to memory
+    st.session_state.chat_sessions[chat_name].append({"role": "user", "content": prompt})
+    with st.chat_message("user"): st.markdown(prompt)
 
     with st.chat_message("assistant", avatar="📐"):
-        with st.spinner("Thinking..."):
-            try:
-                sys_content = f"You are JIX GLOBAL AI. You MUST respond in {st.session_state.language} language. Tone: {st.session_state.mood}."
-                response = client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
-                    messages=[{"role": "system", "content": sys_content}, *st.session_state.chat_sessions[active_chat]]
-                )
-                answer = response.choices[0].message.content
-                st.session_state.chat_sessions[active_chat].append({"role": "assistant", "content": answer})
-            except Exception as e:
-                st.error(f"Error: {e}")
-    st.rerun()
+        # 2. PROMPT ENGINEERING (The "Smart" Sauce)
+        # We tell JIX it's an idea generator, not just a replier.
+        system_instructions = (
+            f"You are JIX GLOBAL, a hyper-intelligent AI OS created by Pathe. "
+            f"Your language is {st.session_state.language}. "
+            "You have full memory of this conversation. "
+            "CRITICAL: Do not just answer. Give 3 creative 'Global Ideas' or 'Next Steps' "
+            "at the end of every response to help Pathe expand his vision."
+        )
+
+        # 3. CONTEXT INJECTION (Sending the whole history for memory)
+        full_context = [{"role": "system", "content": system_instructions}]
+        full_context.extend(st.session_state.chat_sessions[chat_name])
+
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=full_context,
+            temperature=0.8  # Higher temp = more creative ideas
+        )
+
+        ans = response.choices[0].message.content
+        st.markdown(ans)
+        st.session_state.chat_sessions[chat_name].append({"role": "assistant", "content": ans})
