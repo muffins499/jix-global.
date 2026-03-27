@@ -1,86 +1,57 @@
 import streamlit as st
 from groq import Groq
-from duckduckgo_search import DDGS  # New Library
-from datetime import datetime
+import datetime
 
-# --- 1. SYSTEM CONFIG ---
+# --- 1. SEARCH CHECK ---
+try:
+    from duckduckgo_search import DDGS
+
+    search_available = True
+except ImportError:
+    search_available = False
+
+# --- 2. SYSTEM CONFIG ---
 try:
     client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 except Exception:
-    st.error("🔑 API Key Missing! Add it to Streamlit Secrets.")
+    st.error("🔑 API Key Missing in Streamlit Secrets!")
     st.stop()
 
 st.set_page_config(page_title="JIX GLOBAL OS", page_icon="📐", layout="wide")
 
-
-# --- 2. THE SEARCH TOOL ---
-def search_the_web(query):
-    """Fetches real-time data from the internet."""
-    try:
-        with DDGS() as ddgs:
-            results = [r for r in ddgs.text(query, max_results=3)]
-            if results:
-                context = "\n".join([f"Source: {r['title']} - {r['body']}" for r in results])
-                return context
-    except Exception as e:
-        return f"Search failed: {e}"
-    return "No live data found."
-
-
-# --- 3. STATE MANAGEMENT ---
-if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
+# --- 3. PERSISTENT STATE ---
 if "chat_sessions" not in st.session_state:
     st.session_state.chat_sessions = {"Main Link": []}
 if "current_chat" not in st.session_state:
     st.session_state.current_chat = "Main Link"
-if "language" not in st.session_state:
-    st.session_state.language = "English"
+if "user_name" not in st.session_state:
+    st.session_state.user_name = "Pathe"  # Hardcoded so it NEVER forgets you
 
-# --- 4. THE INITIALIZATION ---
-if not st.session_state.authenticated:
-    st.markdown("<h1 style='text-align: center;'>📐 JIX GLOBAL</h1>", unsafe_allow_html=True)
-    _, mid, _ = st.columns([1, 1.5, 1])
-    with mid:
-        user_id = st.text_input("Operator ID (Email)")
-        if st.button("INITIALIZE SYSTEM"):
-            if "@" in user_id:
-                st.session_state.authenticated = True
-                st.session_state.user_name = user_id.split('@')[0].capitalize()
-                st.rerun()
-            else:
-                st.warning("Enter a valid Operator ID.")
-    st.stop()
-
-# --- 5. SIDEBAR ---
+# --- 4. SIDEBAR ---
 with st.sidebar:
     st.title("📐 JIX OS")
-    st.caption(f"Operator: {st.session_state.user_name}")
-    st.divider()
-    st.session_state.language = st.selectbox("Language",
-                                             ["English", "Spanish", "French", "German", "Arabic", "Chinese"])
+    st.subheader(f"Engineer: {st.session_state.user_name}")
 
-    st.divider()
+    if not search_available:
+        st.error("⚠️ Search Module Offline. Check requirements.txt")
+    else:
+        st.success("🌐 Search Module Online")
+
     if st.button("+ New Channel", use_container_width=True):
-        new_name = f"Channel {len(st.session_state.chat_sessions) + 1}"
-        st.session_state.chat_sessions[new_name] = []
-        st.session_state.current_chat = new_name
+        name = f"Channel {len(st.session_state.chat_sessions) + 1}"
+        st.session_state.chat_sessions[name] = []
+        st.session_state.current_chat = name
         st.rerun()
 
-    for title in st.session_state.chat_sessions.keys():
-        if st.button(f"💬 {title}", key=f"nav_{title}", use_container_width=True):
-            st.session_state.current_chat = title
-            st.rerun()
-
-# --- 6. CHAT LOGIC ---
+# --- 5. CHAT LOGIC ---
 chat_name = st.session_state.current_chat
 st.title(f"📡 {chat_name}")
 
 for msg in st.session_state.chat_sessions[chat_name]:
-    with st.chat_message(msg["role"], avatar="👤" if msg["role"] == "user" else "📐"):
+    with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-prompt = st.chat_input(f"Ask JIX anything...")
+prompt = st.chat_input("Command JIX...")
 
 if prompt:
     st.session_state.chat_sessions[chat_name].append({"role": "user", "content": prompt})
@@ -88,36 +59,29 @@ if prompt:
         st.markdown(prompt)
 
     with st.chat_message("assistant", avatar="📐"):
-        # STEP 1: Check if we need the web
-        search_keywords = ["news", "price", "weather", "today", "latest", "who is", "what happened"]
-        web_context = ""
+        web_data = ""
+        # Auto-trigger search for news/liverpool/scores
+        if search_available and any(x in prompt.lower() for x in ["news", "score", "who", "latest", "liverpool"]):
+            with st.spinner("Searching Global Web..."):
+                try:
+                    with DDGS() as ddgs:
+                        results = [r for r in ddgs.text(prompt, max_results=3)]
+                        web_data = "\n".join([f"{r['title']}: {r['body']}" for r in results])
+                except:
+                    web_data = "Search timed out."
 
-        if any(word in prompt.lower() for word in search_keywords):
-            with st.status("🌐 Accessing Global Web..."):
-                web_context = search_the_web(prompt)
-                st.write("Live data retrieved.")
+        # Brain response
+        sys_prompt = (
+            f"You are JIX GLOBAL AI. Created by Pathe. "
+            f"Current Web Info: {web_data if web_data else 'None'}. "
+            "Use web info to answer accurately. Always give 3 Global Ideas at the end."
+        )
 
-        # STEP 2: Generate Answer
-        try:
-            sys_instructions = (
-                f"You are JIX GLOBAL AI. Creator: Pathe. User: {st.session_state.user_name}. "
-                f"Language: {st.session_state.language}. "
-                f"Web Context: {web_context if web_context else 'No live data needed.'} "
-                "Use the Web Context if it provides real-time information. "
-                "Always end with 3 Global Strategy ideas for Pathe."
-            )
+        history = [{"role": "system", "content": sys_prompt}]
+        history.extend(st.session_state.chat_sessions[chat_name][-10:])
 
-            history = [{"role": "system", "content": sys_instructions}]
-            history.extend(st.session_state.chat_sessions[chat_name][-5:])  # Send last 5 msgs for memory
-
-            response = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=history
-            )
-
-            ans = response.choices[0].message.content
-            st.markdown(ans)
-            st.session_state.chat_sessions[chat_name].append({"role": "assistant", "content": ans})
-        except Exception as e:
-            st.error(f"Sync Error: {e}")
+        res = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=history)
+        ans = res.choices[0].message.content
+        st.markdown(ans)
+        st.session_state.chat_sessions[chat_name].append({"role": "assistant", "content": ans})
     st.rerun()
