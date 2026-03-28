@@ -3,128 +3,114 @@ from groq import Groq
 import json
 import os
 
-# --- 1. CORE CONFIG & PERSISTENCE ---
+# --- 1. CORE CONFIG ---
+CHATS_FILE = "jix_brain_v7.json"
 SETTINGS_FILE = "jix_settings.json"
-CHATS_FILE = "jix_brain_v6.json"
 
-
-def load_json(file, default):
-    if os.path.exists(file):
-        try:
-            with open(file, "r") as f:
-                return json.load(f)
-        except:
-            return default
+def load_data(file, default):
+    try:
+        if os.path.exists(file):
+            with open(file, "r") as f: return json.load(f)
+    except: pass
     return default
 
-
-def save_json(file, data):
-    with open(file, "w") as f:
-        json.dump(data, f)
-
+def save_data(file, data):
+    try:
+        with open(file, "w") as f: json.dump(data, f)
+    except: pass
 
 # Initialize Session States
 if "all_chats" not in st.session_state:
-    st.session_state.all_chats = load_json(CHATS_FILE, {})
+    st.session_state.all_chats = load_data(CHATS_FILE, {})
 if "active_title" not in st.session_state:
     st.session_state.active_title = "New Chat"
 if "user_prefs" not in st.session_state:
-    st.session_state.user_prefs = load_json(SETTINGS_FILE, {
-        "user_name": "Pathe",
-        "personality": "Strategic Advisor",
-        "theme": "Light Blue"
-    })
+    st.session_state.user_prefs = load_data(SETTINGS_FILE, {"user_name": "Pathe", "personality": "Strategic Advisor", "theme": "Light Blue"})
 
-# --- 2. THE DESIGN ENGINE (Pro UI) ---
+# --- 2. UI & THEME ---
 st.set_page_config(page_title="JIX GLOBAL", page_icon="🌐", layout="wide")
 
-theme_colors = {
-    "Light Blue": {"bg": "#f0f4f8", "text": "#102a43", "chat": "#ffffff", "sidebar": "#102a43"},
-    "Dark Mode": {"bg": "#0e1117", "text": "#ffffff", "chat": "#262730", "sidebar": "#161b22"},
-    "Neon Matrix": {"bg": "#000000", "text": "#00ff41", "chat": "#0a0a0a", "sidebar": "#000000"}
+themes = {
+    "Light Blue": {"bg": "#f0f4f8", "text": "#102a43", "sidebar": "#102a43"},
+    "Dark Mode": {"bg": "#0e1117", "text": "#ffffff", "sidebar": "#161b22"}
 }
-c = theme_colors.get(st.session_state.user_prefs["theme"])
+t = themes.get(st.session_state.user_prefs.get("theme", "Light Blue"), themes["Light Blue"])
 
 st.markdown(f"""
     <style>
-    .stApp {{ background-color: {c['bg']}; color: {c['text']}; }}
-    section[data-testid="stSidebar"] {{ background-color: {c['sidebar']} !important; }}
-    [data-testid="stChatMessage"] {{ 
-        background-color: {c['chat']} !important; 
-        border-radius: 15px; 
-        border: 1px solid #e0e0e0;
-        max-width: 850px;
-        margin: 0 auto 15px auto;
-    }}
-    .stChatInputContainer {{ max-width: 850px; margin: 0 auto; border-radius: 30px !important; }}
-    h1, h2, h3 {{ font-family: 'Inter', sans-serif; text-align: center; }}
+    .stApp {{ background-color: {t['bg']}; color: {t['text']}; }}
+    section[data-testid="stSidebar"] {{ background-color: {t['sidebar']} !important; }}
+    [data-testid="stChatMessage"] {{ max-width: 800px; margin: 0 auto; }}
+    .stChatInputContainer {{ max-width: 800px; margin: 0 auto; }}
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. SIDEBAR (History & Settings) ---
+# --- 3. SIDEBAR ---
 with st.sidebar:
     st.title("🌐 JIX OS")
-    tab1, tab2, tab3 = st.tabs(["💬 Chats", "⚙️ Config", "❓ Help"])
-
-    with tab1:
-        if st.button("➕ New Conversation", use_container_width=True):
-            st.session_state.active_title = "New Chat"
-            st.rerun()
-        st.divider()
-        for title in reversed(list(st.session_state.all_chats.keys())):
-            if st.button(f"💬 {title[:20]}...", key=title, use_container_width=True):
-                st.session_state.active_title = title
-                st.rerun()
-
-    with tab2:
-        st.subheader("Neural Identity")
-        st.session_state.user_prefs["user_name"] = st.text_input("User Name", st.session_state.user_prefs["user_name"])
-        st.session_state.user_prefs["personality"] = st.selectbox("Tone", ["Strategic Advisor", "Sarcastic Genius",
-                                                                           "Creative Partner"])
-        st.session_state.user_prefs["theme"] = st.selectbox("UI Style", list(theme_colors.keys()))
-        if st.button("💾 Save & Apply"):
-            save_json(SETTINGS_FILE, st.session_state.user_prefs)
+    if st.button("➕ New Chat", use_container_width=True):
+        st.session_state.active_title = "New Chat"
+        st.rerun()
+    st.divider()
+    for title in list(st.session_state.all_chats.keys())[::-1]:
+        if st.button(f"💬 {title[:20]}", key=title, use_container_width=True):
+            st.session_state.active_title = title
             st.rerun()
 
-    with tab3:
-        st.info("JIX is a Global OS designed for high-level strategy and technical drafting.")
-
-# --- 4. API CONNECTION ---
+# --- 4. BRAIN CONNECT ---
 if "GROQ_API_KEY" in st.secrets:
     client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 else:
-    st.error("🔑 Access Denied: Please add GROQ_API_KEY to Secrets.")
+    st.error("Missing GROQ_API_KEY in Secrets!")
     st.stop()
 
-# --- 5. MAIN INTERFACE ---
+# --- 5. MAIN CHAT ---
 active_id = st.session_state.active_title
-active_chat_msgs = st.session_state.all_chats.get(active_id, [])
+if active_id not in st.session_state.all_chats:
+    st.session_state.all_chats[active_id] = []
 
-if not active_chat_msgs:
-    st.markdown("<h1 style='margin-top: 100px;'>How can I help you today?</h1>", unsafe_allow_html=True)
-else:
-    st.markdown(f"<h3 style='color: gray;'>{active_id}</h3>", unsafe_allow_html=True)
-
-# Display Messages
-for msg in active_chat_msgs:
+# Show history
+for msg in st.session_state.all_chats[active_id]:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# --- 6. THE PLUS (+) POWER MENU & INPUT ---
-st.divider()
-input_col, btn_col = st.columns([0.85, 0.15])
-
+# --- 6. INPUT & PLUS MENU ---
+input_col, btn_col = st.columns([0.8, 0.2])
 with btn_col:
-    with st.popover("➕", help="Global Actions"):
-        st.markdown("**Quick Actions**")
-        q_scale = st.button("🚀 Scale Idea", use_container_width=True)
-        q_code = st.button("📝 Draft Code", use_container_width=True)
-        q_trend = st.button("📊 Tech Trends", use_container_width=True)
+    with st.popover("➕ Actions"):
+        q_code = st.button("📝 Draft Code")
+        q_trend = st.button("📊 Trends")
 
-with input_col:
-    user_input = st.chat_input("Command JIX...")
+user_input = st.chat_input("Command JIX...")
+final_prompt = user_input if user_input else ("Draft a Python script" if q_code else ("What are tech trends?" if q_trend else None))
 
-# --- 7. PROCESSING ENGINE ---
-final_prompt = None
-if user_input:
-    final_prompt = user_input
+if final_prompt:
+    # Handle New Chat Titling
+    if active_id == "New Chat":
+        new_title = " ".join(final_prompt.split()[:3]) + "..."
+        st.session_state.all_chats[new_title] = []
+        st.session_state.active_title = new_title
+        active_id = new_title
+
+    # Add message and show immediately
+    st.session_state.all_chats[active_id].append({"role": "user", "content": final_prompt})
+    with st.chat_message("user"):
+        st.markdown(final_prompt)
+
+    # Generate Response
+    with st.chat_message("assistant"):
+        try:
+            sys = f"You are JIX for {st.session_state.user_prefs['user_name']}. Style: {st.session_state.user_prefs['personality']}."
+            hist = [{"role": "system", "content": sys}] + st.session_state.all_chats[active_id][-5:]
+            
+            completion = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=hist)
+            ans = completion.choices[0].message.content
+            st.markdown(ans)
+            st.session_state.all_chats[active_id].append({"role": "assistant", "content": ans})
+            
+            # Save to disk
+            save_data(CHATS_FILE, st.session_state.all_chats)
+        except Exception as e:
+            st.error(f"Neural Error: {e}")
+    
+    st.rerun()
