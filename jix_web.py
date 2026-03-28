@@ -3,8 +3,9 @@ from groq import Groq
 import json
 import os
 from datetime import datetime, timedelta
+from duckduckgo_search import DDGS
 
-# --- 1. CORE DATA & SETTINGS ---
+# --- 1. CORE DATA ---
 CHATS_FILE = "jix_v1_history.json"
 SETTINGS_FILE = "jix_v1_settings.json"
 
@@ -14,7 +15,7 @@ def load_json(file, default):
             with open(file, "r") as f:
                 return json.load(f)
     except Exception as e:
-        print(f"JSON load error ({file}):", e)
+        print("JSON load error:", e)
     return default
 
 # Atomic save (prevents corruption)
@@ -24,7 +25,7 @@ def save_json_atomic(path, data):
         json.dump(data, f)
     os.replace(tmp, path)
 
-# Initialize user profile safely
+# --- SESSION INIT ---
 if "all_chats" not in st.session_state:
     st.session_state.all_chats = load_json(CHATS_FILE, {})
 
@@ -36,16 +37,8 @@ if "user_prefs" not in st.session_state:
     st.session_state.user_prefs = {"name": "Pathe", "country": "South Africa"}
     st.session_state.user_prefs.update(saved)
 
-# --- 2. TIME ENGINE (CRASH-PROOF) ---
-TZ_MAP = {
-    "South Africa": 2,
-    "UK": 0,
-    "USA (EST)": -5,
-    "UAE": 4,
-    "India": 5.5,
-    "Nigeria": 1,
-}
-
+# --- 2. TIME ENGINE ---
+TZ_MAP = {"South Africa": 2, "UK": 0, "USA (EST)": -5, "UAE": 4, "India": 5.5, "Nigeria": 1}
 user_country = st.session_state.user_prefs.get("country", "South Africa")
 offset = TZ_MAP.get(user_country, 2)
 local_time = (datetime.utcnow() + timedelta(hours=offset)).strftime("%H:%M")
@@ -56,19 +49,21 @@ st.set_page_config(page_title="JIX GLOBAL", layout="wide")
 st.markdown("""
 <style>
 .stApp { background-color: #f8f9fa; color: #202124; }
-[data-testid="stSidebar"] {
-    background-color: #ffffff !important;
-    border-right: 1px solid #dadce0;
-}
+[data-testid="stSidebar"] { background-color: #ffffff !important; border-right: 1px solid #dadce0; }
 [data-testid="stChatMessage"] {
-    background-color: #ffffff !important;
-    border: 1px solid #dadce0;
-    border-radius: 12px;
-    max-width: 800px;
-    margin: 0 auto 10px auto;
+    background-color:#ffffff !important;
+    border:1px solid #dadce0;
+    border-radius:12px;
+    max-width:800px;
+    margin:0 auto 10px auto;
 }
-.stChatInputContainer { max-width: 800px; margin: 0 auto; }
-.stButton button { border-radius: 20px; border: 1px solid #dadce0; }
+.stChatInputContainer { max-width:800px; margin:0 auto; }
+.stButton button {
+    border-radius:20px;
+    border:1px solid #dadce0;
+    font-size:14px;
+    padding:5px 15px;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -92,82 +87,85 @@ with st.sidebar:
 
     with st.expander("⚙️ Settings"):
         prefs = st.session_state.user_prefs
-
-        prefs["name"] = st.text_input(
-            "Name",
-            prefs.get("name", "Pathe")
-        )
+        prefs["name"] = st.text_input("Name", prefs.get("name", "Pathe"))
 
         countries = list(TZ_MAP.keys())
-        current_index = countries.index(
-            prefs.get("country", "South Africa")
-        )
+        idx = countries.index(prefs.get("country", "South Africa"))
 
-        prefs["country"] = st.selectbox(
-            "Location",
-            countries,
-            index=current_index
-        )
+        prefs["country"] = st.selectbox("Location", countries, index=idx)
 
         if st.button("Save Settings"):
             save_json_atomic(SETTINGS_FILE, prefs)
             st.rerun()
 
-# --- 5. CHAT INTERFACE ---
-if "GROQ_API_KEY" not in st.secrets:
-    st.error("Please add GROQ_API_KEY to Streamlit Secrets.")
-    st.stop()
-
+# --- 5. CHAT SETUP ---
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
 active_id = st.session_state.active_title
-
 if active_id not in st.session_state.all_chats:
     st.session_state.all_chats[active_id] = []
 
-# Welcome message
+# Welcome
 if not st.session_state.all_chats[active_id]:
     st.markdown(
         f"<h1 style='text-align:center;margin-top:100px;font-weight:400;'>"
-        f"How can I help you, {st.session_state.user_prefs.get('name','Pathe')}?"
+        f"How can I help you, {st.session_state.user_prefs.get('name')}?"
         f"</h1>",
         unsafe_allow_html=True
     )
 
-# Safe message rendering
+# Safe rendering
 for msg in st.session_state.all_chats[active_id]:
     role = msg.get("role", "assistant")
     content = msg.get("content", "")
     with st.chat_message(role):
         st.markdown(content)
 
-# --- 6. TOOLBAR & INPUT ---
+# --- 6. CACHED SEARCH ---
+@st.cache_data(ttl=600)
+def perform_search(query):
+    try:
+        with DDGS() as ddgs:
+            results = [r["body"][:400] for r in ddgs.text(query, max_results=3)]
+            return "\n\n".join(results)
+    except Exception as e:
+        return f"Search unavailable: {e}"
+
+# --- 7. TOOLBAR ---
 st.write("")
-c1, c2, c3, _ = st.columns([1,1,1,5])
+c1, c2, c3, c4 = st.columns([1,1,1,5])
 
 with c1:
-    s_biz = st.button("🚀 Scale")
+    search_btn = st.button("🌐 Search")
 with c2:
-    s_code = st.button("📝 Code")
+    code_btn = st.button("📝 Code")
 with c3:
-    s_trend = st.button("📊 Trends")
+    trend_btn = st.button("📊 Trends")
 
 user_input = st.chat_input("Message JIX...")
+final_prompt = user_input
 
-prompt = user_input
-if s_biz:
-    prompt = "Give me a scaling strategy."
-if s_code:
-    prompt = "Write a Python script."
-if s_trend:
-    prompt = "What are 2026 tech trends?"
+# SEARCH FLOW
+if search_btn:
+    search_query = st.text_input("What should JIX research for you?")
+    if search_query:
+        with st.spinner("Searching the web..."):
+            web_context = perform_search(search_query)
+            final_prompt = f"""
+Use the following real-time web research:
 
-# --- 7. AI RESPONSE ---
-if prompt:
+{web_context}
 
-    # Prevent chat title collisions
+Answer clearly and concisely:
+{search_query}
+"""
+
+# --- 8. AI ENGINE ---
+if final_prompt:
+
+    # collision-safe chat title
     if active_id == "New Chat":
-        base = " ".join(prompt.split()[:3]) + "..."
+        base = final_prompt[:25] + "..."
         new_id = base
         i = 1
         while new_id in st.session_state.all_chats:
@@ -179,27 +177,26 @@ if prompt:
         active_id = new_id
 
     st.session_state.all_chats[active_id].append(
-        {"role": "user", "content": prompt}
+        {"role": "user", "content": final_prompt}
     )
 
-    history = st.session_state.all_chats[active_id][-5:]
+    history = st.session_state.all_chats[active_id][-6:]
 
     with st.chat_message("assistant"):
-        res = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[
-                {
-                    "role": "system",
-                    "content": f"You are JIX, helping {st.session_state.user_prefs.get('name','Pathe')}."
-                }
-            ] + history
-        )
+        with st.spinner("JIX IS THINKING..."):
 
-        reply = res.choices[0].message.content
-        st.markdown(reply)
+            sys = f"You are JIX OS, a strategic assistant for {st.session_state.user_prefs['name']}."
 
-        st.session_state.all_chats[active_id].append(
-            {"role": "assistant", "content": reply}
-        )
+            res = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role":"system","content":sys}] + history
+            )
 
-        save_json_atomic(CHATS_FILE, st.session_state.all_chats)
+            reply = res.choices[0].message.content
+            st.markdown(reply)
+
+            st.session_state.all_chats[active_id].append(
+                {"role": "assistant", "content": reply}
+            )
+
+            save_json_atomic(CHATS_FILE, st.session_state.all_chats)
