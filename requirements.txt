@@ -1,3 +1,2 @@
 streamlit
 groq
-duckduckgo-search==6.2.13
