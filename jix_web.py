@@ -3,7 +3,7 @@ from groq import Groq
 import json
 import os
 
-# --- 1. IDENTITY ---
+# --- 1. CORE CONFIG ---
 ENGINEER = "Pathe"
 OS_NAME = "JIX"
 
@@ -11,70 +11,53 @@ OS_NAME = "JIX"
 if "GROQ_API_KEY" in st.secrets:
     client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 else:
-    st.error("🔑 API Key Missing.")
+    st.error("🔑 Connection Refused: Add GROQ_API_KEY to Secrets.")
     st.stop()
 
-# --- 3. THE DESIGN (Gemini-Inspired) ---
+# --- 3. UI STYLING (The Gemini Pro Look) ---
 st.set_page_config(page_title=OS_NAME, page_icon="🌐", layout="wide")
 
 st.markdown("""
     <style>
-    .stApp { background-color: #ffffff; color: #202124; }
+    .stApp { background-color: #ffffff; }
     section[data-testid="stSidebar"] { background-color: #f8f9fa !important; border-right: 1px solid #e0e0e0; }
-    [data-testid="stChatMessage"] { max-width: 800px; margin: 0 auto; background-color: transparent !important; border: none !important; }
-    .stChatInputContainer { max-width: 800px; margin: 0 auto; border-radius: 28px !important; border: 1px solid #dfe1e5 !important; }
-    h1 { text-align: center; font-family: 'Google Sans', sans-serif; font-weight: 400; color: #1f1f1f; margin-top: 50px; }
-    .stButton button { border: none !important; background-color: transparent !important; text-align: left !important; padding: 10px !important; width: 100%; color: #3c4043 !important; }
-    .stButton button:hover { background-color: #e8eaed !important; }
+    [data-testid="stChatMessage"] { max-width: 850px; margin: 0 auto; border: none !important; }
+    .stChatInputContainer { max-width: 850px; margin: 0 auto; border-radius: 30px !important; }
+    h1 { text-align: center; color: #1f1f1f; font-family: sans-serif; margin-top: 30px; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 4. THE TITLE-BASED MEMORY ENGINE ---
-def load_all_chats():
-    if os.path.exists("jix_brain.json"):
-        with open("jix_brain.json", "r") as f: return json.load(f)
+
+# --- 4. RELIABLE MEMORY ---
+def load_data():
+    if os.path.exists("jix_v3.json"):
+        with open("jix_v3.json", "r") as f: return json.load(f)
     return {}
 
-def save_all_chats(chats):
-    with open("jix_brain.json", "w") as f: json.dump(chats, f)
 
 if "all_chats" not in st.session_state:
-    st.session_state.all_chats = load_all_chats()
+    st.session_state.all_chats = load_data()
 
 if "active_title" not in st.session_state:
-    if st.session_state.all_chats:
-        st.session_state.active_title = list(st.session_state.all_chats.keys())[0]
-    else:
-        st.session_state.active_title = "New Chat"
+    st.session_state.active_title = "New Chat"
 
-# --- 5. SIDEBAR (The Chat Title List) ---
+# --- 5. SIDEBAR NAVIGATION ---
 with st.sidebar:
     st.title(f"🌐 {OS_NAME}")
-    
     if st.button("➕ New chat", use_container_width=True):
         st.session_state.active_title = "New Chat"
         st.rerun()
-    
+
     st.divider()
     st.subheader("Recent")
-    
-    # List actual titles in sidebar
     for title in reversed(list(st.session_state.all_chats.keys())):
-        if st.button(f"💬 {title}", key=title):
+        if st.button(f"💬 {title}", key=title, use_container_width=True):
             st.session_state.active_title = title
             st.rerun()
 
-    st.divider()
-    if st.button("🗑️ Clear all history"):
-        st.session_state.all_chats = {}
-        st.session_state.active_title = "New Chat"
-        save_all_chats({})
-        st.rerun()
-
-# --- 6. MAIN INTERFACE ---
+# --- 6. CHAT INTERFACE ---
 active_title = st.session_state.active_title
 
-# If the chat exists, show messages. If not, show the greeting.
 if active_title in st.session_state.all_chats:
     st.title(active_title)
     for msg in st.session_state.all_chats[active_title]:
@@ -83,33 +66,55 @@ if active_title in st.session_state.all_chats:
 else:
     st.title("Where should we start?")
 
-# --- 7. INPUT & DYNAMIC TITLING ---
-if prompt := st.chat_input("Ask JIX..."):
-    
-    current_messages = st.session_state.all_chats.get(active_title, [])
-    
-    # Add User Message
-    current_messages.append({"role": "user", "content": prompt})
-    
-    # If this is the start of a "New Chat", generate a real title
+# --- 7. THE BRAIN (Intelligence & Strategy Engine) ---
+if prompt := st.chat_input("Enter Global Command..."):
     target_title = active_title
+
     if active_title == "New Chat":
-        # Create a title from the first 5 words
-        new_title = " ".join(prompt.split()[:5])
-        if len(prompt.split()) > 5: new_title += "..."
-        
-        # Ensure title is unique
-        if new_title in st.session_state.all_chats:
-            new_title += f" ({len(st.session_state.all_chats)})"
-            
-        st.session_state.all_chats[new_title] = current_messages
-        st.session_state.active_title = new_title
-        target_title = new_title
-    else:
-        st.session_state.all_chats[active_title] = current_messages
+        # Create a professional title from the prompt
+        target_title = " ".join(prompt.split()[:4])
+        st.session_state.all_chats[target_title] = []
+        st.session_state.active_title = target_title
 
-    # Display immediately
-    st.rerun() # Refresh to show user message and new sidebar title
+    # 1. Save User Input
+    st.session_state.all_chats[target_title].append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
 
-    # Generate AI Response (This will happen after the rerun if we structure it for speed)
-    # Note: For even better performance, I'll place the AI call inside the block above
+    # 2. Generate Intelligent Response
+    with st.chat_message("assistant"):
+        with st.spinner("SYST: ANALYZING GLOBAL VECTORS..."):
+            try:
+                # --- THIS IS THE INTELLIGENCE INJECTION ---
+                sys_msg = (
+                    f"You are JIX GLOBAL OS. Your Lead Engineer is {ENGINEER}. "
+                    "You are a hyper-intelligent strategic advisor. Your tone is professional, "
+                    "authoritative, and slightly futuristic. "
+                    "RULES: "
+                    "1. Never give generic answers. Always look for a 'Global Edge'. "
+                    "2. If the user asks a question, answer it, then suggest a way to scale that idea. "
+                    "3. ALWAYS end every response with a section titled '--- STRATEGIC OBJECTIVES ---' "
+                    "listing 3 actionable, high-level steps Pathe should take next."
+                )
+
+                history = [{"role": "system", "content": sys_msg}] + st.session_state.all_chats[target_title][-10:]
+
+                # Using the Llama 3.3 70B model for high-level reasoning
+                response = client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=history,
+                    temperature=0.8  # Higher temp = more creative/interesting ideas
+                )
+
+                reply = response.choices[0].message.content
+                st.markdown(reply)
+
+                # 3. Save & Persist
+                st.session_state.all_chats[target_title].append({"role": "assistant", "content": reply})
+                with open("jix_brain_v4.json", "w") as f:
+                    json.dump(st.session_state.all_chats, f)
+
+            except Exception as e:
+                st.error(f"NEURAL ERROR: {e}")
+
+    st.rerun()
