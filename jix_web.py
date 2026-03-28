@@ -1,87 +1,162 @@
 import streamlit as st
 from groq import Groq
-import datetime
+import json
+import os
 
-# --- 1. SEARCH CHECK ---
-try:
-    from duckduckgo_search import DDGS
+# --- 1. BOOT SEQUENCE & IDENTITY ---
+ENGINEER = "Pathe"
+OS_NAME = "JIX GLOBAL"
+OS_VERSION = "2.1-STABLE"
 
-    search_available = True
-except ImportError:
-    search_available = False
-
-# --- 2. SYSTEM CONFIG ---
-try:
-    client = Groq(api_key=st.secrets["GROQ_API_KEY"])
-except Exception:
-    st.error("🔑 API Key Missing in Streamlit Secrets!")
+# --- 2. NEURAL COUPLING (API CHECK) ---
+if "GROQ_API_KEY" in st.secrets:
+    try:
+        client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+    except Exception as e:
+        st.error(f"📡 CONNECTION ERROR: {e}")
+        st.stop()
+else:
+    st.error("🔒 SYSTEM LOCK: GROQ_API_KEY missing in Streamlit Secrets.")
     st.stop()
 
-st.set_page_config(page_title="JIX GLOBAL OS", page_icon="📐", layout="wide")
+# --- 3. FUTURISTIC HUD (GLASSMORPHISM UI) ---
+# This must be the VERY FIRST streamlit command
+st.set_page_config(page_title=OS_NAME, page_icon="📐", layout="wide")
 
-# --- 3. PERSISTENT STATE ---
-if "chat_sessions" not in st.session_state:
-    st.session_state.chat_sessions = {"Main Link": []}
-if "current_chat" not in st.session_state:
-    st.session_state.current_chat = "Main Link"
-if "user_name" not in st.session_state:
-    st.session_state.user_name = "Pathe"  # Hardcoded so it NEVER forgets you
+st.markdown("""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto+Mono&display=swap');
 
-# --- 4. SIDEBAR ---
+    /* Background: Deep Space Gradient */
+    .stApp {
+        background: radial-gradient(circle at 50% 50%, #0a0b10 0%, #000000 100%);
+        color: #00f2ff;
+        font-family: 'Roboto Mono', monospace;
+    }
+
+    /* Sidebar: Frosted Glass Effect */
+    section[data-testid="stSidebar"] {
+        background: rgba(10, 10, 20, 0.8) !important;
+        backdrop-filter: blur(20px);
+        border-right: 1px solid rgba(0, 242, 255, 0.3);
+    }
+
+    /* Chat Bubbles: Glowing Glass */
+    [data-testid="stChatMessage"] {
+        background: rgba(255, 255, 255, 0.03) !important;
+        border: 1px solid rgba(0, 242, 255, 0.2) !important;
+        border-radius: 20px !important;
+        padding: 25px !important;
+        margin-bottom: 20px !important;
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8);
+        backdrop-filter: blur(4px);
+    }
+
+    /* User Avatar vs AI Avatar */
+    .st-emotion-cache-janm0z { border: 2px solid #00f2ff; }
+
+    /* Input Field: Neon Border */
+    .stChatInputContainer {
+        border: 1px solid #00f2ff !important;
+        background: rgba(0, 0, 0, 0.9) !important;
+        border-radius: 15px !important;
+        box-shadow: 0 0 15px rgba(0, 242, 255, 0.3);
+    }
+
+    /* Headers: Orbitron Font */
+    h1, h2, h3 {
+        font-family: 'Orbitron', sans-serif !important;
+        color: #00f2ff !important;
+        text-transform: uppercase;
+        letter-spacing: 4px;
+        text-shadow: 0 0 15px rgba(0, 242, 255, 0.6);
+    }
+
+    /* Hide Streamlit Header/Footer for cleaner look */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    </style>
+    """, unsafe_allow_html=True)
+
+# --- 4. PERSISTENT LOGS (MEMORY) ---
+MEMORY_FILE = "jix_memory.json"
+
+def save_mem(data):
+    with open(MEMORY_FILE, "w") as f:
+        json.dump(data, f)
+
+def load_mem():
+    if os.path.exists(MEMORY_FILE):
+        with open(MEMORY_FILE, "r") as f:
+            return json.load(f)
+    return {"MAIN_LINK": []}
+
+if "history" not in st.session_state:
+    st.session_state.history = load_mem()
+
+# --- 5. SIDEBAR COMMAND CENTER ---
 with st.sidebar:
-    st.title("📐 JIX OS")
-    st.subheader(f"Engineer: {st.session_state.user_name}")
-
-    if not search_available:
-        st.error("⚠️ Search Module Offline. Check requirements.txt")
-    else:
-        st.success("🌐 Search Module Online")
-
-    if st.button("+ New Channel", use_container_width=True):
-        name = f"Channel {len(st.session_state.chat_sessions) + 1}"
-        st.session_state.chat_sessions[name] = []
-        st.session_state.current_chat = name
+    st.title("📐 JIX_OS")
+    st.markdown(f"**STATUS:** `OPERATIONAL`")
+    st.markdown(f"**ENGINEER:** `{ENGINEER}`")
+    st.markdown(f"**CORE:** `{OS_VERSION}`")
+    st.divider()
+    
+    if st.button("RESET NEURAL LINK", use_container_width=True):
+        st.session_state.history = {"MAIN_LINK": []}
+        save_mem(st.session_state.history)
         st.rerun()
+    
+    st.caption("System monitoring active. All inputs are being logged for learning.")
 
-# --- 5. CHAT LOGIC ---
-chat_name = st.session_state.current_chat
-st.title(f"📡 {chat_name}")
+# --- 6. NEURAL INTERFACE (CHAT) ---
+st.title("// NEURAL_LINK_ACTIVE")
 
-for msg in st.session_state.chat_sessions[chat_name]:
-    with st.chat_message(msg["role"]):
+# Display History
+for msg in st.session_state.history["MAIN_LINK"]:
+    with st.chat_message(msg["role"], avatar="📐" if msg["role"]=="assistant" else "👤"):
         st.markdown(msg["content"])
 
-prompt = st.chat_input("Command JIX...")
+# User Command Input
+prompt = st.chat_input("Enter Command to JIX...")
 
 if prompt:
-    st.session_state.chat_sessions[chat_name].append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
+    # Append User Input
+    st.session_state.history["MAIN_LINK"].append({"role": "user", "content": prompt})
+    with st.chat_message("user", avatar="👤"):
         st.markdown(prompt)
 
+    # Generate AI Response
     with st.chat_message("assistant", avatar="📐"):
-        web_data = ""
-        # Auto-trigger search for news/liverpool/scores
-        if search_available and any(x in prompt.lower() for x in ["news", "score", "who", "latest", "liverpool"]):
-            with st.spinner("Searching Global Web..."):
-                try:
-                    with DDGS() as ddgs:
-                        results = [r for r in ddgs.text(prompt, max_results=3)]
-                        web_data = "\n".join([f"{r['title']}: {r['body']}" for r in results])
-                except:
-                    web_data = "Search timed out."
+        with st.spinner("SYST_CALCULATING_STRATEGY..."):
+            try:
+                # The System Instruction (Brain Setup)
+                sys_msg = (
+                    f"You are JIX GLOBAL OS. Your lead engineer is {ENGINEER}. "
+                    "You are a futuristic, strategic, and highly intelligent AI. "
+                    "You remember all past interactions. End every response with a "
+                    "'GLOBAL_STRATEGY' section containing 3 high-level ideas."
+                )
+                
+                # Context limit: Send last 10 messages for memory
+                messages = [{"role": "system", "content": sys_msg}] + st.session_state.history["MAIN_LINK"][-10:]
 
-        # Brain response
-        sys_prompt = (
-            f"You are JIX GLOBAL AI. Created by Pathe. "
-            f"Current Web Info: {web_data if web_data else 'None'}. "
-            "Use web info to answer accurately. Always give 3 Global Ideas at the end."
-        )
-
-        history = [{"role": "system", "content": sys_prompt}]
-        history.extend(st.session_state.chat_sessions[chat_name][-10:])
-
-        res = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=history)
-        ans = res.choices[0].message.content
-        st.markdown(ans)
-        st.session_state.chat_sessions[chat_name].append({"role": "assistant", "content": ans})
+                response = client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=messages,
+                    temperature=0.7
+                )
+                
+                full_res = response.choices[0].message.content
+                st.markdown(full_res)
+                
+                # Save to History
+                st.session_state.history["MAIN_LINK"].append({"role": "assistant", "content": full_res})
+                save_mem(st.session_state.history)
+                
+            except Exception as e:
+                st.error(f"NEURAL_LINK_FAILURE: {e}")
+    
+    # Force refresh to show new messages
     st.rerun()
