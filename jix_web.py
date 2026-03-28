@@ -3,133 +3,266 @@ from groq import Groq
 import json
 import os
 from datetime import datetime, timedelta
+from uuid import uuid4
 
-# --- 1. CORE DATA ---
-CHATS_FILE = "jix_brain_v13.json"
-SETTINGS_FILE = "jix_settings.json"
+# =====================================================
+# 1. CORE DATA
+# =====================================================
 
-def load_data(file, default):
+CHATS_FILE = "jix_v2_history.json"
+SETTINGS_FILE = "jix_v2_settings.json"
+
+
+def load_json(file, default):
     try:
         if os.path.exists(file):
-            with open(file, "r") as f: return json.load(f)
-    except: pass
+            with open(file, "r") as f:
+                return json.load(f)
+    except Exception:
+        pass
     return default
 
-# Initialize states
-if "all_chats" not in st.session_state:
-    st.session_state.all_chats = load_data(CHATS_FILE, {})
-if "active_title" not in st.session_state:
-    st.session_state.active_title = "New Chat"
-if "user_prefs" not in st.session_state:
-    st.session_state.user_prefs = load_data(SETTINGS_FILE, {
-        "user_name": "Pathe", 
-        "country": "South Africa",
-        "timezone_offset": 2 
-    })
 
-# --- 2. TIME CALCULATOR ---
-# Simplified timezone offsets for major regions
+def save_json_atomic(file, data):
+    tmp = file + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(data, f, indent=2)
+    os.replace(tmp, file)
+
+
+# =====================================================
+# 2. SESSION INIT
+# =====================================================
+
+if "all_chats" not in st.session_state:
+    st.session_state.all_chats = load_json(CHATS_FILE, {})
+
+if "active_id" not in st.session_state:
+    st.session_state.active_id = None
+
+if "user_prefs" not in st.session_state:
+    saved = load_json(SETTINGS_FILE, {})
+    st.session_state.user_prefs = {
+        "name": "Pathe",
+        "country": "South Africa",
+        "model": "llama-3.3-70b-versatile",
+        "memory": 6,
+        "personality": "You are JIX, a smart strategic AI assistant.",
+        **saved,
+    }
+
+# =====================================================
+# 3. TIME ENGINE
+# =====================================================
+
 TZ_MAP = {
-    "South Africa": 2, "UK": 0, "USA (EST)": -5, "USA (PST)": -8, 
-    "UAE": 4, "India": 5.5, "Australia (AEST)": 10, "Nigeria": 1
+    "South Africa": 2,
+    "UK": 0,
+    "USA (EST)": -5,
+    "UAE": 4,
+    "India": 5.5,
+    "Nigeria": 1,
 }
 
-current_offset = TZ_MAP.get(st.session_state.user_prefs["country"], 0)
-# Calculate local time based on UTC
-local_now = datetime.utcnow() + timedelta(hours=current_offset)
-current_hour = local_now.hour
-time_str = local_now.strftime("%H:%M")
+offset = TZ_MAP.get(st.session_state.user_prefs["country"], 2)
+local_time = (datetime.utcnow() + timedelta(hours=offset)).strftime("%H:%M")
 
-# --- 3. SLEEKER (LIGHTER) DARK THEME ---
-st.set_page_config(page_title="JIX OS", page_icon="🌐", layout="wide")
+# =====================================================
+# 4. PAGE DESIGN
+# =====================================================
+
+st.set_page_config(page_title="JIX GLOBAL", layout="wide")
 
 st.markdown("""
-    <style>
-    /* Lighter charcoal for better visibility */
-    .stApp { background-color: #202124; color: #e8eaed; }
-    [data-testid="stSidebar"] { background-color: #2d2e30 !important; border-right: 1px solid #3c4043; }
-    [data-testid="stChatMessage"] { background-color: #303134 !important; border-radius: 12px; max-width: 850px; margin: 0 auto 10px auto; }
-    .stChatInputContainer { max-width: 850px; margin: 0 auto; }
-    h1, p { font-family: 'Inter', sans-serif; }
-    </style>
-    """, unsafe_allow_html=True)
+<style>
+.stApp {background:#f8f9fa;}
+[data-testid="stSidebar"] {
+    background:white;
+    border-right:1px solid #dadce0;
+}
+[data-testid="stChatMessage"]{
+    background:white;
+    border-radius:12px;
+    border:1px solid #e0e0e0;
+    max-width:800px;
+    margin:auto;
+}
+</style>
+""", unsafe_allow_html=True)
 
-# --- 4. SIDEBAR & SETTINGS ---
+# =====================================================
+# 5. SIDEBAR
+# =====================================================
+
 with st.sidebar:
     st.title("🌐 JIX OS")
-    st.caption(f"📍 {st.session_state.user_prefs['country']} | 🕒 {time_str}")
-    
-    if st.button("➕ Initialize New Session", use_container_width=True):
-        st.session_state.active_title = "New Chat"
-        st.rerun()
-    
-    st.divider()
-    # Chat History
-    for title in list(st.session_state.all_chats.keys())[::-1]:
-        if st.button(f"📄 {title[:20]}", key=title, use_container_width=True):
-            st.session_state.active_title = title
-            st.rerun()
-    
-    st.divider()
-    with st.expander("🛠️ OS Config"):
-        st.session_state.user_prefs["user_name"] = st.text_input("Engineer Name", st.session_state.user_prefs["user_name"])
-        st.session_state.user_prefs["country"] = st.selectbox("Current Location", list(TZ_MAP.keys()))
-        if st.button("💾 Sync OS Settings", use_container_width=True):
-            with open(SETTINGS_FILE, "w") as f: json.dump(st.session_state.user_prefs, f)
-            st.rerun()
+    st.caption(f"📍 {st.session_state.user_prefs['country']} | 🕒 {local_time}")
 
-    if st.button("🗑️ Wipe All History", type="secondary"):
-        st.session_state.all_chats = {}
-        if os.path.exists(CHATS_FILE): os.remove(CHATS_FILE)
+    if st.button("➕ New Chat", use_container_width=True):
+        cid = str(uuid4())
+        st.session_state.all_chats[cid] = {
+            "title": "New Chat",
+            "messages": [],
+            "created": datetime.utcnow().isoformat(),
+        }
+        st.session_state.active_id = cid
+        save_json_atomic(CHATS_FILE, st.session_state.all_chats)
         st.rerun()
 
-# --- 5. MAIN CHAT INTERFACE ---
-if "GROQ_API_KEY" in st.secrets:
-    client = Groq(api_key=st.secrets["GROQ_API_KEY"])
-else:
+    st.divider()
+
+    search = st.text_input("🔎 Search chats")
+
+    for cid, chat in reversed(list(st.session_state.all_chats.items())):
+        if search.lower() not in chat["title"].lower():
+            continue
+        if st.button(f"💬 {chat['title'][:22]}", key=cid, use_container_width=True):
+            st.session_state.active_id = cid
+            st.rerun()
+
+    st.divider()
+
+    # SETTINGS
+    with st.expander("⚙️ Settings", expanded=False):
+
+        prefs = st.session_state.user_prefs
+
+        prefs["name"] = st.text_input("Name", prefs["name"])
+        prefs["country"] = st.selectbox(
+            "Location", list(TZ_MAP.keys()),
+            index=list(TZ_MAP.keys()).index(prefs["country"])
+        )
+
+        prefs["model"] = st.selectbox(
+            "Model",
+            ["llama-3.3-70b-versatile", "mixtral-8x7b"],
+        )
+
+        prefs["memory"] = st.slider("Conversation Memory", 2, 15, prefs["memory"])
+
+        prefs["personality"] = st.text_area(
+            "System Personality",
+            prefs["personality"],
+            height=120,
+        )
+
+        if st.button("Save Settings"):
+            save_json_atomic(SETTINGS_FILE, prefs)
+            st.success("Saved")
+
+# =====================================================
+# 6. CHAT ENGINE
+# =====================================================
+
+if "GROQ_API_KEY" not in st.secrets:
+    st.error("Add GROQ_API_KEY to secrets.")
     st.stop()
 
-active_id = st.session_state.active_title
-if active_id not in st.session_state.all_chats:
-    st.session_state.all_chats[active_id] = []
+client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# Dynamic Greeting
-if not st.session_state.all_chats[active_id]:
-    greeting = "Good morning" if current_hour < 12 else "Good afternoon" if current_hour < 18 else "Good evening"
-    st.markdown(f"<h1 style='text-align: center; margin-top: 100px;'>{greeting}, Engineer {st.session_state.user_prefs['user_name']}.</h1>", unsafe_allow_html=True)
-    st.markdown(f"<p style='text-align: center; color: #9aa0a6;'>Neural Link established in {st.session_state.user_prefs['country']}.</p>", unsafe_allow_html=True)
+active_id = st.session_state.active_id
 
-for msg in st.session_state.all_chats[active_id]:
+if not active_id:
+    st.markdown(
+        f"<h1 style='text-align:center;margin-top:120px;'>"
+        f"How can I help you, {st.session_state.user_prefs['name']}?"
+        f"</h1>",
+        unsafe_allow_html=True,
+    )
+    st.stop()
+
+chat = st.session_state.all_chats[active_id]
+
+# =====================================================
+# 7. CHAT DISPLAY
+# =====================================================
+
+for msg in chat["messages"]:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# --- 6. TOOLBAR & INPUT ---
-st.write("")
-c1, c2, c3, c4 = st.columns([1,1,1,5])
-with c1: s_biz = st.button("🚀 Scale")
-with c2: s_code = st.button("📝 Code")
-with c3: s_trend = st.button("📊 Trends")
+# =====================================================
+# 8. TOOLBAR
+# =====================================================
 
-user_input = st.chat_input("Command JIX...")
-final_prompt = user_input
-if s_biz: final_prompt = "Provide a high-level scaling strategy."
-if s_code: final_prompt = "Draft a modular Python script."
-if s_trend: final_prompt = "What are the top tech trends for 2026?"
+c1, c2, c3, c4 = st.columns([1, 1, 1, 6])
 
-if final_prompt:
-    if active_id == "New Chat":
-        active_id = " ".join(final_prompt.split()[:3]) + "..."
-        st.session_state.all_chats[active_id] = []
-        st.session_state.active_title = active_id
+with c1:
+    scale = st.button("🚀 Scale")
 
-    st.session_state.all_chats[active_id].append({"role": "user", "content": final_prompt})
-    
+with c2:
+    code = st.button("📝 Code")
+
+with c3:
+    trends = st.button("📊 Trends")
+
+with c4:
+    if st.button("🗑 Delete Chat"):
+        del st.session_state.all_chats[active_id]
+        save_json_atomic(CHATS_FILE, st.session_state.all_chats)
+        st.session_state.active_id = None
+        st.rerun()
+
+# =====================================================
+# 9. INPUT
+# =====================================================
+
+user_input = st.chat_input("Message JIX...")
+
+prompt = user_input
+if scale:
+    prompt = "Give me a startup scaling strategy."
+elif code:
+    prompt = "Write a clean Python script."
+elif trends:
+    prompt = "What are the biggest technology trends in 2026?"
+
+# =====================================================
+# 10. AI RESPONSE (STREAMING)
+# =====================================================
+
+if prompt:
+
+    chat["messages"].append({"role": "user", "content": prompt})
+
     with st.chat_message("assistant"):
-        sys = f"You are JIX OS for {st.session_state.user_prefs['user_name']}. Location: {st.session_state.user_prefs['country']}."
-        hist = [{"role": "system", "content": sys}] + st.session_state.all_chats[active_id][-10:]
-        res = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=hist)
-        reply = res.choices[0].message.content
-        st.markdown(reply)
-        st.session_state.all_chats[active_id].append({"role": "assistant", "content": reply})
-        with open(CHATS_FILE, "w") as f: json.dump(st.session_state.all_chats, f)
+        placeholder = st.empty()
+        response_text = ""
+
+        stream = client.chat.completions.create(
+            model=st.session_state.user_prefs["model"],
+            stream=True,
+            messages=[
+                {
+                    "role": "system",
+                    "content": st.session_state.user_prefs["personality"],
+                }
+            ]
+            + chat["messages"][-st.session_state.user_prefs["memory"]:],
+        )
+
+        for chunk in stream:
+            delta = chunk.choices[0].delta.content or ""
+            response_text += delta
+            placeholder.markdown(response_text + "▌")
+
+        placeholder.markdown(response_text)
+
+    chat["messages"].append({"role": "assistant", "content": response_text})
+
+    # Auto title generation
+    if chat["title"] == "New Chat":
+        chat["title"] = " ".join(prompt.split()[:4]) + "..."
+
+    save_json_atomic(CHATS_FILE, st.session_state.all_chats)
+
     st.rerun()
+
+# =====================================================
+# 11. FOOTER STATS
+# =====================================================
+
+st.caption(
+    f"Messages: {len(chat['messages'])} | "
+    f"Model: {st.session_state.user_prefs['model']}"
+)
