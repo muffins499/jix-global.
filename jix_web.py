@@ -125,4 +125,4 @@ if prompt := st.chat_input(f"Command JIX, {st.session_state.user_prefs['user_nam
         st.session_state.all_chats[active_title].append({"role": "assistant", "content": reply})
 
     save_json(CHATS_FILE, st.session_state.all_chats)
-    st.rerun()rerun()
+    st.rerun()
