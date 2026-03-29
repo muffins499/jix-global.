@@ -40,7 +40,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 3. SESSION & HISTORY PERSISTENCE ---
+# --- 3. SESSION & HISTORY PERSISTENCE (Clean Version) ---
 if "all_chats" not in st.session_state:
     if os.path.exists(CHATS_FILE):
         with open(CHATS_FILE, "r") as f:
@@ -48,10 +48,11 @@ if "all_chats" not in st.session_state:
     else:
         st.session_state.all_chats = {}
 
+# Ensure we always have an active chat, but don't force it into the saved dict yet
 if "active_chat" not in st.session_state:
     st.session_state.active_chat = "New Session"
 
-# --- 4. SIDEBAR (The "X" Delete Logic) ---
+# --- 4. SIDEBAR (The "X" Logic + Duplicate Fix) ---
 with st.sidebar:
     st.markdown("# **JIX OS**")
     if st.button("➕ New Session", use_container_width=True):
@@ -61,7 +62,12 @@ with st.sidebar:
     st.divider()
     st.caption("RECENT INTELLIGENCE")
     
+    # Only show chats that actually have content
     for title in list(st.session_state.all_chats.keys()):
+        # skip empty ghost sessions
+        if not st.session_state.all_chats[title]:
+            continue
+            
         cols = st.columns([0.8, 0.2])
         with cols[0]:
             if st.button(f"💬 {title[:18]}", key=f"sel_{title}", use_container_width=True):
@@ -70,10 +76,10 @@ with st.sidebar:
         with cols[1]:
             if st.button("✕", key=f"del_{title}", help="Close Session"):
                 del st.session_state.all_chats[title]
-                with open(CHATS_FILE, "w") as f: json.dump(st.session_state.all_chats, f)
+                with open(CHATS_FILE, "w") as f:
+                    json.dump(st.session_state.all_chats, f)
                 st.session_state.active_chat = "New Session"
                 st.rerun()
-
 # --- 5. MAIN INTERFACE ---
 active_id = st.session_state.active_chat
 if active_id not in st.session_state.all_chats:
