@@ -2,7 +2,15 @@ import streamlit as st
 from groq import Groq
 import json
 import os
+from duckduckgo_search import DDGS
 
+def get_live_search(query):
+    """Fetch real-time data from the web."""
+    with DDGS() as ddgs:
+        results = [r for r in ddgs.text(query, max_results=3)]
+        # Format the search results into a clean string for the AI
+        search_context = "\n".join([f"Source: {r['title']} - {r['body']}" for r in results])
+        return search_context
 # --- 1. SETTINGS & BRAIN CONFIG ---
 # Ensure your Groq Key is in your Streamlit Secrets
 try:
